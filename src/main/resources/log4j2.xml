@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- 日志组件启动时，打印调试信息，并监控此文件变化，周期300秒 -->
+<Configuration status="warn" monitorInterval="300" strict="true" schema="Log4J-V2.2.xsd">
+    <properties>
+        <!-- 配置文件，包括此文件内的所有变量的配置 -->
+        <property name="LOG_PATH" value="./logs"/>
+        <property name="APP_NAME" value="testLog"/>
+        <!-- flume日志文件名 -->
+        <property name="TEST_FLUME_LOG_NAME" value="TestFlumeLog"/>
+        <!-- 日志收集端口 -->
+        <property name="FLUME_PORT" value="44444"/>
+    </properties>
+    <!-- contextName主要是为了区分在一个web容器下部署多个应用启用jmx时，不会出现混乱 -->
+    <contextName>${APP_NAME}</contextName>
+    <Appenders>
+        <!-- ***************************************************************** -->
+        <!-- 配置输出到控制台，仅在开发测试时启用输出到控制台  -->
+        <!-- ***************************************************************** -->
+        <Console name="STDOUT" target="SYSTEM_OUT">
+            <Cu
+           <!-- <PatternLayout charset="UTF-8">
+                <Pattern>[%X{uniqueFlowNo}]%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger:%L- %m%n</Pattern>
+            </PatternLayout>-->
+        </Console>
+        <Console name="STDOUTJSON" target="SYSTEM_OUT">
+            <!--
+                http://logging.apache.org/log4j/2.x/manual/layouts.html#JSONLayout
+                1. complete="true" {}之间有逗号分隔
+                2. compact="true"  不换行
+                3. eventEol="true" 在每条记录后附加一行结尾
+                4. properties="true" 包含上下文映射
+            -->
+            <JsonLayout charset="UTF-8" complete="false" compact="true" eventEol="true" properties="true" objectMessageAsJsonObject="true">
+                <KeyValuePair key="logTime" value="$${date:yyyy-MM-dd HH:mm:ss.SSS}"/>
+            </JsonLayout>
+        </Console>
+        <RollingFile name="debug" fileName="${LOG_PATH}/${APP_NAME}.log"  append="true"
+                     filePattern="${LOG_PATH}/${APP_NAME}.log.%d{yyyy-MM-dd}.%i">
+            <PatternLayout>
+                <Pattern>[%X{uniqueFlowNo}]%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger:- %m%n</Pattern>
+            </PatternLayout>
+            <Policies>
+                <!--如果日志文件比当前JVM的启动时间早，最小文件大小达到或超过minSize（字节）时封存文件-->
+                <OnStartupTriggeringPolicy minSize="10737418241"/>
+                <!--24小时封存文件，modulate用来校准当天时间-->
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <!--文件大小达到size时封存文件-->
+                <SizeBasedTriggeringPolicy size="1024MB"/>
+            </Policies>
+            <Filters>
+                <ThresholdFilter level="INFO"/>
+            </Filters>
+            <!--生成多少个日志文件后会覆盖以前的日志文件-->
+            <DefaultRolloverStrategy max="102400"/>
+        </RollingFile>
+        <RollingFile name="error" fileName="${LOG_PATH}/${APP_NAME}-error.log"  append="true"
+                     filePattern="${LOG_PATH}/${APP_NAME}-error.log.%d{yyyy-MM-dd}.%i">
+            <PatternLayout>
+                <Pattern>[%X{uniqueFlowNo}]%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger:- %m%n</Pattern>
+            </PatternLayout>
+            <Policies>
+                <OnStartupTriggeringPolicy minSize="1073741824"/>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="1024MB"/>
+            </Policies>
+            <Filters>
+                <ThresholdFilter level="ERROR"/>
+            </Filters>
+            <DefaultRolloverStrategy max="102400"/>
+        </RollingFile>
+
+        <!-- 输出日志到Flume -->
+        <FlumeLog name="FlumeAppender" compress="false" systemCode="TEST" messageType="testLog">
+            <Agent host="${sys:FlumeIp}" port="${FLUME_PORT}"/>
+            <PatternLayout pattern="%m%n" />
+        </FlumeLog>
+
+        <!-- 输出日志到Kafka -->
+        <Kafka name="KafkaAppender" topic="spark-test">
+            <PatternLayout pattern="%m%n" />
+            <Property name="bootstrap.servers">${sys:brokers}</Property>
+        </Kafka>
+    </Appenders>
+
+    <Loggers>
+        <Root level="info">
+            <appender-ref ref="STDOUT" />
+            <!--<appender-ref ref="STDOUTJSON" />-->
+        </Root>
+        <Logger name="com.zxk.log.FlumeLog" level="info" >
+            <appender-ref ref="FlumeAppender" />
+        </Logger>
+        <Logger name="com.zxk.log.KafkaLog" level="info" >
+            <appender-ref ref="KafkaAppender" />
+        </Logger>
+    </Loggers>
+</Configuration>
